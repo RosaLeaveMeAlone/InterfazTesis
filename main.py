@@ -29,6 +29,8 @@ from tkinter import ttk
 from tkinter import messagebox
 from bluetooth import *
 from time import sleep
+import RPi.GPIO as GPIO
+
 
 import subprocess
 import threading
@@ -177,6 +179,12 @@ class FullScreenWindow:
     def TecladoVirtual(self):
         self.hiloVentana = subprocess.call("/usr/bin/matchbox-keyboard", shell=False)
         
+    def LecturaPines(self):
+        while True:
+            self.proceso = GPIO.input(self.pinProceso)
+            self.confirmacion = GPIO.input(self.pinConfirmacion)
+            sleep(0.5)
+
     def Mostrar5s(self):  
         while True:
             sleep(5)
@@ -230,59 +238,31 @@ class FullScreenWindow:
             client_sock.close()
             server_sock.close()
             print("all done")
-            #~ shellscript = subprocess.Popen(["shellscript.sh"], stdin=subprocess.PIPE)
-        #~ self.shellscript = subprocess.Popen(["/home/pi/Documents/Python Pruebas/InterfazTesis/AbrirBT.sh"], stdin=subprocess.PIPE)
-        #~ self.hiloBT = subprocess.call("/home/pi/Documents/Python Pruebas/InterfazTesis/AbrirBT.sh", shell=False)
 
+    def AdministrarPines(self):
+        while True:
+            if(self.realizarpedido and self.confirmacion == 0):
+                self.frameMensaje.pack_forget()
+                self.UserVentana()
+                tkMessageBox.showinfo("Información", "No se ha podido procesar el pedido")
+            
+            if(self.realizarpedido and self.confirmacion == 1 and self.proceso == 1):
+                self.mensajeMostrar.set("Su pedido esta siendo procesado.")
 
-    def EscucharBT(self):
+            if(self.realizarpedido and self.confirmacion == 1 and self.proceso == 0):
+                self.realizarpedido = False
+                self.frameMensaje.pack_forget()
+                self.UserVentana()
+                tkMessageBox.showinfo("Información", "Su pedido ha sido terminado")
+            sleep(0.1)
         
-        self.AbrirConexionBT()
-        #~ while True:
-            #~ server_sock=BluetoothSocket( RFCOMM )
-            #~ print("DEspues del RFCOMM")
-
-            #~ port = 2
-            #~ server_sock.bind(("",port))
-            #~ print("Despues del bind")
-            #~ server_sock.listen(2)
-            #~ print("despues del listen")
-
-            #~ client_sock,address = server_sock.accept()
-            #~ print("Accepted connection from " + str(address))
-
-            #~ data = client_sock.recv(1024)
-            #~ print("received [%s]" % data)
-            #~ print("Aqui en el while")
-            #~ sleep(0.1)
-            #~ server_sock=BluetoothSocket( L2CAP )
-            #~ print("AQui despues de server sock")
- 
-            #~ port = 0x1001
-
-            #~ server_sock.bind(("",port))
-            #~ print("AQui despues de .bind")
-            #~ server_sock.listen(1)
-            #~ print("Aqui despues de listen 1")
-
-#~ #uuid = "94f39d29-7d6d-437d-973b-fba39e49d4ef"
-#~ #bluetooth.advertise_service( server_sock, "SampleServerL2CAP",
-#~ #                   service_id = uuid,
-#~ #                   service_classes = [ uuid ]
-#~ #                    )
-                   
-            #~ client_sock,address = server_sock.accept()
-            #~ print("Accepted connection from ",address)
-
-            #~ data = client_sock.recv(1024)
-            #~ print("Data received: ", str(data))
-
-            #~ while data:
-                #~ print("Aqui en while data")
-                #~ client_sock.send('Echo => ' + str(data))
-                #~ data = client_sock.recv(1024)
-                #~ print("Data received:", str(data))
+    def HiloLeerPines(self):
+        self.hiloLecturaPines = threading.Thread(target=self.LecturaPines)
+        self.hiloLecturaPines.start()
         
+    def HiloAdministrarPines(self):
+        self.hiloAdministrarPines = threading.Thread(target=self.LecturaPines)
+        self.hiloAdministrarPines.start()
 
     def AbrirTeclado(self, event=None):
         self.hilo1 = threading.Thread(target=self.TecladoVirtual)
@@ -633,8 +613,18 @@ class FullScreenWindow:
         trama+= chr(4) # fin de transmision 2
         print(trama)
         self.EnviarInformacion(trama)
+        sleep(1)
+        self.frameUser.pack_forget()
+        self.labelUser.pack_forget()  
+        self.VentanaMensaje("Su pedido a sido realizado")
+        
+        
         #~ self.diccionarioPedido {Nombre receta : cantidad}
         #~ self.diccionarioListaGeneral {Nombre receta : id}
+  
+    def VentanaMensaje(self,mensaje):
+        self.frameMensaje.pack(fill=BOTH,expand=1)  
+        self.mensajeMostrar.set(mensaje)
      
     def AgregarBebidaPedido(self):
         self.diccionarioPedido[ self.listboxBebidasDisponibles.get(ACTIVE) ] = self.txtCantidadBebidas.get()
@@ -668,11 +658,22 @@ class FullScreenWindow:
         
         
     def __init__(self):
-                       
+            
+        GPIO.setmode(GPIO.BOARD)  
+        
+        self.vaciado = False
+        self.realizarpedido = False
+        self.pinProceso = 37
+        self.pinConfirmacion = 35
+        GPIO.setup(self.pinProceso,GPIO.IN,pull_up_down=GPIO.PUD_UP)  
+        GPIO.setup(self.pinConfirmacion,GPIO.IN,pull_up_down=GPIO.PUD_UP)  
+        self.proceso = 0 # Siendo 0 proceso de dosificacion off y 1 proceso de dosificacion encendido
+        self.confirmacion = 0 # Siendo 0 accion denegada y 1 accion aprobada
         #~ self.hiloPrueba = threading.Thread(target=self.EscucharBT)
         #~ self.hiloPrueba.start()
             
-            
+        self.HiloLeerPines()
+        
         self.dbManager = DatabaseManager()
 
         
@@ -683,6 +684,15 @@ class FullScreenWindow:
         self.tk.attributes("-zoomed", False)#PARA TRABAJAR EN HDMI
         self.tk.attributes("-fullscreen", False)
         self.tk.configure (bg="#eaebf1")
+        
+        self.mensajeMostrar = StringVar()
+        
+        #FRAME MOSTRAR MENSAJE AISLADO
+        self.frameMensaje = Frame(self.tk)
+        self.frameMensaje.configure(bg="#eaebf1")
+        self.labelBebidasDisponibles = Label(self.frameMensaje,textvariable=self.mensajeMostrar)
+        self.labelBebidasDisponibles.grid(column=0, row=0, padx=80, pady=40)
+        
         
         
         #FRAME PRINCIPAL 
