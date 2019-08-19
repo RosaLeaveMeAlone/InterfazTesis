@@ -176,6 +176,31 @@ class DatabaseManager:
 
 class FullScreenWindow:
         
+    def VaciarContenedor(self):
+        trama = "" + chr(1) + chr(23);
+        print("El valor del RB es")
+        print(self.rbOpcionVaciado.get())
+        if(self.rbOpcionVaciado.get() == 1):
+            trama += "A" + chr(29) + chr(7) + self.TextBoxVaciadoContenedor1.get() + chr(29)
+        elif(self.rbOpcionVaciado.get() == 2):
+            trama += "B" + chr(29) + chr(7) + self.TextBoxVaciadoContenedor2.get() + chr(29)
+        elif(self.rbOpcionVaciado.get() == 3):
+            trama += "C" + chr(29) + chr(7) + self.TextBoxVaciadoContenedor3.get() + chr(29)
+        elif(self.rbOpcionVaciado.get() == 4):
+            trama += "D" + chr(29) + chr(7) + self.TextBoxVaciadoContenedor4.get() + chr(29)
+        elif(self.rbOpcionVaciado.get() == 5):
+            trama += "E" + chr(29) + chr(7) + self.TextBoxVaciadoContenedor5.get() + chr(29)
+        elif(self.rbOpcionVaciado.get() == 6):
+            trama += "F" + chr(29) + chr(7) + self.TextBoxVaciadoContenedor6.get() + chr(29)
+        trama += chr(4)
+        print("Voy a enviar la siguiente trama")
+        print(trama)
+        self.frameVaciadoContenedor.pack_forget()
+        self.EnviarInformacion(trama)
+        self.vaciado = True
+        self.VentanaMensaje("Ventana Vaciado")
+        
+        
     def TecladoVirtual(self):
         self.hiloVentana = subprocess.call("/usr/bin/matchbox-keyboard", shell=False)
         
@@ -183,7 +208,8 @@ class FullScreenWindow:
         while True:
             self.proceso = GPIO.input(self.pinProceso)
             self.confirmacion = GPIO.input(self.pinConfirmacion)
-            sleep(0.5)
+
+            sleep(0.1)
 
     def Mostrar5s(self):  
         while True:
@@ -240,11 +266,19 @@ class FullScreenWindow:
             print("all done")
 
     def AdministrarPines(self):
+        
         while True:
+            if(self.vaciado and self.proceso == 0):
+                self.frameMensaje.pack_forget()
+                self.VaciadoContenedorVentana()
+                print("PASE POR AQUI XD")
+                
+        
             if(self.realizarpedido and self.confirmacion == 0):
                 self.frameMensaje.pack_forget()
                 self.UserVentana()
-                tkMessageBox.showinfo("Información", "No se ha podido procesar el pedido")
+                self.realizarpedido = False
+                messagebox.showinfo("Información", "No se ha podido procesar el pedido, no hay liquido suficiente.")
             
             if(self.realizarpedido and self.confirmacion == 1 and self.proceso == 1):
                 self.mensajeMostrar.set("Su pedido esta siendo procesado.")
@@ -253,15 +287,15 @@ class FullScreenWindow:
                 self.realizarpedido = False
                 self.frameMensaje.pack_forget()
                 self.UserVentana()
-                tkMessageBox.showinfo("Información", "Su pedido ha sido terminado")
-            sleep(0.1)
+                messagebox.showinfo("Información", "Su pedido ha sido realizado con exito.")
+            sleep(0.3)
         
     def HiloLeerPines(self):
         self.hiloLecturaPines = threading.Thread(target=self.LecturaPines)
         self.hiloLecturaPines.start()
         
     def HiloAdministrarPines(self):
-        self.hiloAdministrarPines = threading.Thread(target=self.LecturaPines)
+        self.hiloAdministrarPines = threading.Thread(target=self.AdministrarPines)
         self.hiloAdministrarPines.start()
 
     def AbrirTeclado(self, event=None):
@@ -284,6 +318,7 @@ class FullScreenWindow:
         self.frameAdmin.pack(fill=BOTH,expand=1)
         
     def UserVentana(self):
+        self.listboxBebidasDisponibles.delete(0,'end')
         self.LogicaListaGeneral(self.listboxBebidasDisponibles)
         self.labelBienvenida.pack_forget()
         self.framePrincipal.pack_forget()
@@ -580,18 +615,26 @@ class FullScreenWindow:
     
 
     def EnviarInformacion(self,trama):
-        self.nearby_devices = discover_devices(lookup_names=True)    
+        #~ self.nearby_devices = discover_devices(lookup_names=True)    
         self.s = BluetoothSocket(RFCOMM)
+        service = find_service(address='3C:71:BF:64:50:26')
+        first_match = service[0]
+        port = first_match["port"]
+        name = first_match["name"]
+        host = first_match["host"]
+        self.s.connect((host,1))
+        self.s.send(trama)
+
         #~ print(self.nearby_devices)
-        for addr, name in self.nearby_devices:
-            if name == "ESP32test":
-                service = find_service(address=addr)
-                first_match = service[0]
-                port = first_match["port"]
-                name = first_match["name"]
-                host = first_match["host"]
-                self.s.connect((host,1))
-                self.s.send(trama)
+        #~ for addr, name in self.nearby_devices:
+            #~ if name == "ESP32test":
+                #~ service = find_service(address='3C:71:BF:64:50:26')
+                #~ first_match = service[0]
+                #~ port = first_match["port"]
+                #~ name = first_match["name"]
+                #~ host = first_match["host"]
+                #~ self.s.connect((host,1))
+                #~ self.s.send(trama)
         self.s.close()
 
 
@@ -613,10 +656,13 @@ class FullScreenWindow:
         trama+= chr(4) # fin de transmision 2
         print(trama)
         self.EnviarInformacion(trama)
-        sleep(1)
         self.frameUser.pack_forget()
         self.labelUser.pack_forget()  
-        self.VentanaMensaje("Su pedido a sido realizado")
+        self.VentanaMensaje("Su pedido ha sido realizado")
+        sleep(1.1)
+        print("AQUI PUSE EN TRUE REALIZARPEDIDO")
+        self.realizarpedido = True
+
         
         
         #~ self.diccionarioPedido {Nombre receta : cantidad}
@@ -661,18 +707,20 @@ class FullScreenWindow:
             
         GPIO.setmode(GPIO.BOARD)  
         
+        
         self.vaciado = False
         self.realizarpedido = False
         self.pinProceso = 37
         self.pinConfirmacion = 35
-        GPIO.setup(self.pinProceso,GPIO.IN,pull_up_down=GPIO.PUD_UP)  
-        GPIO.setup(self.pinConfirmacion,GPIO.IN,pull_up_down=GPIO.PUD_UP)  
+        GPIO.setup(self.pinProceso,GPIO.IN,pull_up_down=GPIO.PUD_DOWN)  
+        GPIO.setup(self.pinConfirmacion,GPIO.IN,pull_up_down=GPIO.PUD_DOWN)  
         self.proceso = 0 # Siendo 0 proceso de dosificacion off y 1 proceso de dosificacion encendido
         self.confirmacion = 0 # Siendo 0 accion denegada y 1 accion aprobada
         #~ self.hiloPrueba = threading.Thread(target=self.EscucharBT)
         #~ self.hiloPrueba.start()
             
         self.HiloLeerPines()
+        self.HiloAdministrarPines()
         
         self.dbManager = DatabaseManager()
 
@@ -963,6 +1011,8 @@ Contenedores
         self.contenedor4Nombre = StringVar()
         self.contenedor5Nombre = StringVar()
         self.contenedor6Nombre = StringVar()
+        
+        self.cantidadavaciar = 0
 
 
         
@@ -1047,21 +1097,21 @@ Contenedores
         self.rbContenedor5.grid(column=2,row=5)
         self.rbContenedor6.grid(column=2,row=6)
         
-        self.btnVaciado = Button(self.frameVaciadoContenedor, text="Vaciar", command=self.AdminVolver, height = 5, width = 10)
+        self.btnVaciado = Button(self.frameVaciadoContenedor, text="Vaciar", command=self.VaciarContenedor, height = 5, width = 10)
         self.btnVaciado.grid(column=3, row=7) 
         
-        self.labelContenedor1ml = Label(self.frameVaciadoContenedor, text="1200 ml")
-        self.labelContenedor1ml.grid(column=3, row=1)
-        self.labelContenedor2ml = Label(self.frameVaciadoContenedor, text="1200 ml")
-        self.labelContenedor2ml.grid(column=3, row=2)
-        self.labelContenedor3ml = Label(self.frameVaciadoContenedor, text="1200 ml")
-        self.labelContenedor3ml.grid(column=3, row=3)
-        self.labelContenedor4ml = Label(self.frameVaciadoContenedor, text="1200 ml")
-        self.labelContenedor4ml.grid(column=3, row=4)
-        self.labelContenedor5ml = Label(self.frameVaciadoContenedor, text="1200 ml")
-        self.labelContenedor5ml.grid(column=3, row=5)
-        self.labelContenedor6ml = Label(self.frameVaciadoContenedor, text="1200 ml")
-        self.labelContenedor6ml.grid(column=3, row=6)
+        #~ self.labelContenedor1ml = Label(self.frameVaciadoContenedor, text="1200 ml")
+        #~ self.labelContenedor1ml.grid(column=3, row=1)
+        #~ self.labelContenedor2ml = Label(self.frameVaciadoContenedor, text="1200 ml")
+        #~ self.labelContenedor2ml.grid(column=3, row=2)
+        #~ self.labelContenedor3ml = Label(self.frameVaciadoContenedor, text="1200 ml")
+        #~ self.labelContenedor3ml.grid(column=3, row=3)
+        #~ self.labelContenedor4ml = Label(self.frameVaciadoContenedor, text="1200 ml")
+        #~ self.labelContenedor4ml.grid(column=3, row=4)
+        #~ self.labelContenedor5ml = Label(self.frameVaciadoContenedor, text="1200 ml")
+        #~ self.labelContenedor5ml.grid(column=3, row=5)
+        #~ self.labelContenedor6ml = Label(self.frameVaciadoContenedor, text="1200 ml")
+        #~ self.labelContenedor6ml.grid(column=3, row=6)
 
     
 
